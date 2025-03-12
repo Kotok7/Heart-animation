@@ -1,3 +1,4 @@
+# made by @kotokk
 # requires pygame and pywin to work
 import math
 import random
@@ -7,15 +8,7 @@ from win32gui import SetWindowLong, GetWindowLong, SetLayeredWindowAttributes
 
 def generate_random_dots(num: int, width: int, height: int) -> list[tuple[int, int]]:
     """
-    Generate a list of random dot positions on the screen.
-    
-    Args:
-        num: Number of dots to generate.
-        width: Width of the screen.
-        height: Height of the screen.
-    
-    Returns:
-        A list of (x, y) positions.
+    Generuje listę losowych pozycji kropek na ekranie.
     """
     margin = 50
     return [(random.randint(margin, width - margin), random.randint(margin, height - margin))
@@ -23,15 +16,7 @@ def generate_random_dots(num: int, width: int, height: int) -> list[tuple[int, i
 
 def generate_heart_shape(num: int, width: int, height: int) -> list[tuple[int, int]]:
     """
-    Generate positions in the shape of a heart.
-    
-    Args:
-        num: Number of points (dots) to generate.
-        width: Width of the screen.
-        height: Height of the screen.
-    
-    Returns:
-        A list of (x, y) positions forming a heart shape.
+    Generuje pozycje w kształcie serca.
     """
     heart_dots = []
     for i in range(num):
@@ -44,14 +29,7 @@ def generate_heart_shape(num: int, width: int, height: int) -> list[tuple[int, i
 
 def setup_display(width: int, height: int) -> pygame.Surface:
     """
-    Initialize and return the pygame display with a transparent window.
-    
-    Args:
-        width: Width of the display.
-        height: Height of the display.
-    
-    Returns:
-        The initialized pygame display surface.
+    Inicjalizuje i zwraca powierzchnię wyświetlacza pygame z przezroczystym oknem.
     """
     screen = pygame.display.set_mode((width, height), pygame.NOFRAME)
     pygame.display.set_caption("Pulsujące serce")
@@ -77,11 +55,16 @@ def main() -> None:
     NUM_DOTS = 150
     TRANSITION_TIME = 3
     PULSE_PERIOD = 2000
+    DRIFT_AMPLITUDE = 5
 
     screen = setup_display(WIDTH, HEIGHT)
     
     dots = generate_random_dots(NUM_DOTS, WIDTH, HEIGHT)
     heart_positions = generate_heart_shape(NUM_DOTS, WIDTH, HEIGHT)
+    
+    dot_color_phases = [random.uniform(0, 2 * math.pi) for _ in range(NUM_DOTS)]
+    dot_drift_phases_x = [random.uniform(0, 2 * math.pi) for _ in range(NUM_DOTS)]
+    dot_drift_phases_y = [random.uniform(0, 2 * math.pi) for _ in range(NUM_DOTS)]
     
     clock = pygame.time.Clock()
     start_time = pygame.time.get_ticks()
@@ -94,22 +77,39 @@ def main() -> None:
 
         if elapsed_time > 2:
             pulse_time = (current_time - start_time - 2000) % PULSE_PERIOD
-            pulse_factor = (math.sin(2 * math.pi * pulse_time / PULSE_PERIOD) + 1) / 2
-            heart_color = (
-                int(HEART_DARK[0] + pulse_factor * (HEART_LIGHT[0] - HEART_DARK[0])),
-                int(HEART_DARK[1] + pulse_factor * (HEART_LIGHT[1] - HEART_DARK[1])),
-                int(HEART_DARK[2] + pulse_factor * (HEART_LIGHT[2] - HEART_DARK[2]))
-            )
+            global_pulse = (math.sin(2 * math.pi * pulse_time / PULSE_PERIOD) + 1) / 2
         else:
-            heart_color = DOT_COLOR
+            global_pulse = 0
 
-        for i, (x, y) in enumerate(dots):
+        for i, (start_x, start_y) in enumerate(dots):
             if elapsed_time > 2:
                 progress = min(1.0, (elapsed_time - 2) / TRANSITION_TIME)
                 target_x, target_y = heart_positions[i]
-                x = int(x + (target_x - x) * progress)
-                y = int(y + (target_y - y) * progress)
-            pygame.draw.circle(screen, heart_color, (x, y), 3)
+                x = int(start_x + (target_x - start_x) * progress)
+                y = int(start_y + (target_y - start_y) * progress)
+            else:
+                x, y = start_x, start_y
+
+            drift_x = DRIFT_AMPLITUDE * math.sin(elapsed_time + dot_drift_phases_x[i])
+            drift_y = DRIFT_AMPLITUDE * math.sin(elapsed_time + dot_drift_phases_y[i])
+            x += int(drift_x)
+            y += int(drift_y)
+
+            if elapsed_time > 2:
+                local_pulse = (math.sin(elapsed_time + dot_color_phases[i]) + 1) / 2
+                combined_pulse = (global_pulse + local_pulse) / 2
+                dot_color = (
+                    int(HEART_DARK[0] + combined_pulse * (HEART_LIGHT[0] - HEART_DARK[0])),
+                    int(HEART_DARK[1] + combined_pulse * (HEART_LIGHT[1] - HEART_DARK[1])),
+                    int(HEART_DARK[2] + combined_pulse * (HEART_LIGHT[2] - HEART_DARK[2]))
+                )
+            else:
+                dot_color = DOT_COLOR
+
+            pygame.draw.circle(screen, dot_color, (x, y), 3)
+
+        BORDER_THICKNESS = 3
+        pygame.draw.rect(screen, (255, 255, 255), (0, 0, WIDTH, HEIGHT), BORDER_THICKNESS)
 
         pygame.display.update()
         clock.tick(60)
