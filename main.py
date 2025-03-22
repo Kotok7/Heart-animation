@@ -1,14 +1,27 @@
-# made by @kotokk
-# requires pygame and pywin to work
+# pip install pygame
+# pip install pywin32
 import math
 import random
 import pygame
 from win32con import WS_EX_LAYERED, WS_EX_TRANSPARENT, WS_EX_TOPMOST, GWL_EXSTYLE, LWA_COLORKEY, SWP_NOMOVE, SWP_NOSIZE, HWND_TOPMOST
-from win32gui import SetWindowLong, GetWindowLong, SetLayeredWindowAttributes, SetWindowPos
+from win32gui import SetWindowLong, GetWindowLong, SetLayeredWindowAttributes, SetWindowPos, SetParent, GetDesktopWindow
+
+BORDER_THICKNESS = 3
+MARGIN = 50
+DOT_RADIUS = 3
+
+TRANSPARENT_COLOR = (1, 2, 3)
+DOT_COLOR = (80, 30, 30)
+HEART_DARK = (120, 10, 10)
+HEART_LIGHT = (255, 50, 50)
+
+NUM_DOTS = 150
+TRANSITION_TIME = 3      # seconds after 2 seconds delay
+PULSE_PERIOD = 2000      # milliseconds
+DRIFT_AMPLITUDE = 5
 
 def generate_random_dots(num, width, height):
-    margin = 50
-    return [(random.randint(margin, width - margin), random.randint(margin, height - margin)) for _ in range(num)]
+    return [(random.randint(MARGIN, width - MARGIN), random.randint(MARGIN, height - MARGIN)) for _ in range(num)]
 
 def generate_heart_shape(num, width, height):
     heart_dots = []
@@ -21,12 +34,16 @@ def generate_heart_shape(num, width, height):
 
 def setup_display(width, height):
     screen = pygame.display.set_mode((width, height), pygame.NOFRAME)
-    pygame.display.set_caption("Pulsujące serce")
+    pygame.display.set_caption("Pulsating Heart Overlay")
     hwnd = pygame.display.get_wm_info()["window"]
+    # Make window a child of the desktop so it overlays current screen content
+    desktop_hwnd = GetDesktopWindow()
+    SetParent(hwnd, desktop_hwnd)
     styles = GetWindowLong(hwnd, GWL_EXSTYLE)
     new_styles = styles | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST
     SetWindowLong(hwnd, GWL_EXSTYLE, new_styles)
-    SetLayeredWindowAttributes(hwnd, 0, 0, LWA_COLORKEY)
+    # Use TRANSPARENT_COLOR as colorkey so it's see-through
+    SetLayeredWindowAttributes(hwnd, TRANSPARENT_COLOR[0] | (TRANSPARENT_COLOR[1] << 8) | (TRANSPARENT_COLOR[2] << 16), 0, LWA_COLORKEY)
     SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE)
     return screen
 
@@ -34,14 +51,6 @@ def main():
     pygame.init()
     display_info = pygame.display.Info()
     WIDTH, HEIGHT = display_info.current_w, display_info.current_h
-    BACKGROUND_COLOR = (0, 0, 0)
-    DOT_COLOR = (80, 30, 30)
-    HEART_DARK = (120, 10, 10)
-    HEART_LIGHT = (255, 50, 50)
-    NUM_DOTS = 150
-    TRANSITION_TIME = 3
-    PULSE_PERIOD = 2000
-    DRIFT_AMPLITUDE = 5
     screen = setup_display(WIDTH, HEIGHT)
     dots = generate_random_dots(NUM_DOTS, WIDTH, HEIGHT)
     heart_positions = generate_heart_shape(NUM_DOTS, WIDTH, HEIGHT)
@@ -51,15 +60,17 @@ def main():
     clock = pygame.time.Clock()
     start_time = pygame.time.get_ticks()
     running = True
+
     while running:
-        screen.fill(BACKGROUND_COLOR)
         current_time = pygame.time.get_ticks()
         elapsed_time = (current_time - start_time) / 1000.0
+        screen.fill(TRANSPARENT_COLOR)
         if elapsed_time > 2:
             pulse_time = (current_time - start_time - 2000) % PULSE_PERIOD
             global_pulse = (math.sin(2 * math.pi * pulse_time / PULSE_PERIOD) + 1) / 2
         else:
             global_pulse = 0
+
         for i, (start_x, start_y) in enumerate(dots):
             if elapsed_time > 2:
                 progress = min(1.0, (elapsed_time - 2) / TRANSITION_TIME)
@@ -68,10 +79,12 @@ def main():
                 y = int(start_y + (target_y - start_y) * progress)
             else:
                 x, y = start_x, start_y
+
             drift_x = DRIFT_AMPLITUDE * math.sin(elapsed_time + dot_drift_phases_x[i])
             drift_y = DRIFT_AMPLITUDE * math.sin(elapsed_time + dot_drift_phases_y[i])
             x += int(drift_x)
             y += int(drift_y)
+
             if elapsed_time > 2:
                 local_pulse = (math.sin(elapsed_time + dot_color_phases[i]) + 1) / 2
                 combined_pulse = (global_pulse + local_pulse) / 2
@@ -82,16 +95,17 @@ def main():
                 )
             else:
                 dot_color = DOT_COLOR
-            pygame.draw.circle(screen, dot_color, (x, y), 3)
-        BORDER_THICKNESS = 3
+
+            pygame.draw.circle(screen, dot_color, (x, y), DOT_RADIUS)
+
         pygame.draw.rect(screen, (255, 255, 255), (0, 0, WIDTH, HEIGHT), BORDER_THICKNESS)
         pygame.display.update()
         clock.tick(60)
+
         for event in pygame.event.get():
-            if event.type == pygame.QUIT:
+            if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                 running = False
-            elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                running = False
+
     pygame.quit()
 
 if __name__ == "__main__":
